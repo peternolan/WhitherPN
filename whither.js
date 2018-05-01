@@ -20,8 +20,6 @@ var W; // global namespace variable
 	var IS_GOAL = "goal"; // goal ID
 	var IS_WALL = "wall"; // wall ID
 	var IS_FOOD = "food"; // food ID
-    var IS_STOP = "stop"; // food ID
-
 
 	var STEP1 = 255;
 	var STEP2 = 128;
@@ -59,7 +57,7 @@ var W; // global namespace variable
 	var xmax; // maximum actor x-pos
 	var ymax; // maximum actor y-pos
 
-	var level = 20; // starting/current level
+	var level = 0; // starting/current level
 
 	var ax; // current actor x-pos
 	var ay; // current actor y-pos
@@ -68,10 +66,6 @@ var W; // global namespace variable
 	var gx; // current goal x-pos
 	var gy; // current goal y-pos
 	var gdelta; // goal alpha delta
-
-	var sbx;
-	var sby;
-
 
 	var foods; // list of foods: [x, y]
 
@@ -393,37 +387,14 @@ var W; // global namespace variable
 			]
 		},
 
-		// Level 20a
+		// Level 20
 		{
-
 			ax : 0, ay : 7, // actor x/y
 			asize : 0, // actor size
 
-            gx : 9, gy: 7, // atop x/y
-            gdelta : 16,
-
-
-		},
-
-		//Level 20b
-		{
-            ax : 0, ay : 7, // actor x/y
-            asize : 0, // actor size
-
-            gx : 9, gy: 4, // goal x/y
-
-
-            foods : [
-                [ 9, 7 ]
-            ]
-
-		},
-
-		//Level 20c
-		{
-
+			gx : 9, gy: 7, // goal x/y
+			gdelta : 32 // goal alpha delta
 		}
-
 	];
 
 	// PRIVATE FUNCTIONS
@@ -475,138 +446,104 @@ var W; // global namespace variable
 		PS.data( x, y, IS_FOOD ); // set id
 	}
 
-    function makeStop ( x, y ) {
-
-        PS.color( x, y, COLOR_FLOOR );
-        PS.alpha( x, y, PS.ALPHA_OPAQUE );
-        PS.border( x, y, 0 );
-        PS.borderColor( x, y, COLOR_FLOOR_BORDER );
-        PS.borderAlpha( x, y, PS.ALPHA_OPAQUE );
-        PS.data( x, y, IS_STOP ); // set id
-
-    }
-
-
 	// Start specified level
 
 	function start ( val ) {
 		var data, len, i, pos, x, y;
 
-        var channel;
-
 		level = val;
-
-		if (level === 22) {
-            PS.statusColor(PS.COLOR_BLACK);
-            PS.borderFade(PS.ALL, PS.ALL, 35);
-            PS.borderColor(PS.ALL, PS.ALL, PS.COLOR_WHITE);
-            PS.gridFade(35);
-            PS.gridColor(PS.COLOR_WHITE);
-            PS.fade(PS.ALL, PS.ALL, 35);
-            PS.color (PS.ALL, PS.ALL, PS.COLOR_WHITE);
-            PS.fade(PS.ALL, PS.ALL, 35);
-            PS.color (PS.ALL, PS.ALL, PS.COLOR_WHITE);
-
+		if ( !music && ( level > 0 ) ) {
+			music = true;
+			PS.statusText( "Whither" );
+			PS.audioPlay( "whither" );
 		}
 
-		else {
+		// Completely reset grid
 
-            if (!music && (level > 0)) {
-                music = true;
-                PS.statusText("Whither");
-                PS.audioPlay("whither");
-            }
+		PS.color( PS.ALL, PS.ALL, COLOR_FLOOR );
+		PS.alpha( PS.ALL, PS.ALL, PS.ALPHA_OPAQUE );
+		PS.border( PS.ALL, PS.ALL, 0 ); // hide borders
+		PS.borderColor( PS.ALL, PS.ALL, COLOR_FLOOR_BORDER );
+		PS.borderAlpha( PS.ALL, PS.ALL, PS.ALPHA_OPAQUE );
+		PS.data( PS.ALL, PS.ALL, IS_FLOOR ); // all floor
 
-            // Completely reset grid
+		// Init level from data
 
-            PS.color(PS.ALL, PS.ALL, COLOR_FLOOR);
-            PS.alpha(PS.ALL, PS.ALL, PS.ALPHA_OPAQUE);
-            PS.border(PS.ALL, PS.ALL, 0); // hide borders
-            PS.borderColor(PS.ALL, PS.ALL, COLOR_FLOOR_BORDER);
-            PS.borderAlpha(PS.ALL, PS.ALL, PS.ALPHA_OPAQUE);
-            PS.data(PS.ALL, PS.ALL, IS_FLOOR); // all floor
+		data = levelData[ level ];
 
-            // Init level from data
+		// Setup actor
 
-            PS.debug("LEVEL " + level + "\n");
-            data = levelData[level];
+		place( data.ax, data.ay, data.asize );
 
-            // Setup actor
+		// Setup goal if defined
 
-            place(data.ax, data.ay, data.asize);
+		gx = data.gx;
+		if ( gx !== undefined )
+		{
+			gy = data.gy;
+			gdelta = data.gdelta;
+			if ( gdelta === undefined ) {
+				gdelta = 0; // default delta
+			}
+			PS.color( gx, gy, COLOR_GOAL );
+			PS.border( gx, gy, WIDTH_GOAL_BORDER );
+			PS.borderColor( gx, gy, COLOR_GOAL_BORDER );
+			PS.data( gx, gy, IS_GOAL ); // set id
+		}
 
-            // Setup goal if defined
+		// Set up walls if any defined
 
-            gx = data.gx;
-            if (gx !== undefined) {
-                gy = data.gy;
-                gdelta = data.gdelta;
-                if (gdelta === undefined) {
-                    gdelta = 0; // default delta
-                }
-                PS.color(gx, gy, COLOR_GOAL);
-                PS.border(gx, gy, WIDTH_GOAL_BORDER);
-                PS.borderColor(gx, gy, COLOR_GOAL_BORDER);
-                PS.data(gx, gy, IS_GOAL); // set id
-            }
+		if ( data.walls !== undefined ) {
+			len = data.walls.length;
+			for ( i = 0; i < len; i += 1 ) {
+				pos = data.walls[ i ];
+				x = pos[ 0 ];
+				y = pos[ 1 ];
+				makeWall( x, y );
+			}
+		}
 
+		// Set up fading walls if any defined
 
-            // Set up walls if any defined
+		fadewalls = data.fadewalls;
+		if ( fadewalls !== undefined ) {
+			len = fadewalls.length;
+			for ( i = 0; i < len; i += 1 ) {
+				pos = fadewalls[ i ];
+				x = pos[ 0 ];
+				y = pos[ 1 ];
+				makeWall( x, y );
+				pos[ 3 ] = true; // mark as active
+			}
+		}
 
-            if (data.walls !== undefined) {
-                len = data.walls.length;
-                for (i = 0; i < len; i += 1) {
-                    pos = data.walls[i];
-                    x = pos[0];
-                    y = pos[1];
-                    makeWall(x, y);
-                }
-            }
+		// Set up foods if any defined
 
-            // Set up fading walls if any defined
+		foods = data.foods;
+		if ( foods !== undefined ) {
+			len = foods.length;
+			for ( i = 0; i < len; i += 1 ) {
+				pos = foods[ i ];
+				x = pos[ 0 ];
+				y = pos[ 1 ];
+				makeFood( x, y );
+				pos[ 3 ] = true; // mark as active
+			}
+		}
 
-            fadewalls = data.fadewalls;
-            if (fadewalls !== undefined) {
-                len = fadewalls.length;
-                for (i = 0; i < len; i += 1) {
-                    pos = fadewalls[i];
-                    x = pos[0];
-                    y = pos[1];
-                    makeWall(x, y);
-                    pos[3] = true; // mark as active
-                }
-            }
+		// Set up fading foods if any defined
 
-            // Set up foods if any defined
-
-            foods = data.foods;
-            if (foods !== undefined) {
-                len = foods.length;
-                for (i = 0; i < len; i += 1) {
-                    pos = foods[i];
-                    x = pos[0];
-                    y = pos[1];
-                    makeFood(x, y);
-                    pos[3] = true; // mark as active
-                }
-            }
-
-            // Set up fading foods if any defined
-
-            fadefoods = data.fadefoods;
-            if (fadefoods !== undefined) {
-                len = fadefoods.length;
-                for (i = 0; i < len; i += 1) {
-                    pos = fadefoods[i];
-                    x = pos[0];
-                    y = pos[1];
-                    makeFood(x, y);
-                    pos[3] = true; // mark as active
-                }
-            }
-
-            stop = data.sx;
-        }
+		fadefoods = data.fadefoods;
+		if ( fadefoods !== undefined ) {
+			len = fadefoods.length;
+			for ( i = 0; i < len; i += 1 ) {
+				pos = fadefoods[ i ];
+				x = pos[ 0 ];
+				y = pos[ 1 ];
+				makeFood( x, y );
+				pos[ 3 ] = true; // mark as active
+			}
+		}
 	}
 
 	// Blackout for level fail
@@ -646,190 +583,155 @@ var W; // global namespace variable
 
 		// Move actor relative to current position
 
-
-
 		move : function ( x, y ) {
-            if (level !== 22) {
-                var nx, ny, data, len, i, pos, xp, yp, delta, alpha, found;
+			var nx, ny, data, len, i, pos, xp, yp, delta, alpha, found;
 
-                if (!play) { // if play disabled, abort
-                    return;
-                }
+			if ( !play ) { // if play disabled, abort
+				return;
+			}
 
-                // Calc proposed position
+			// Calc proposed position
 
-                nx = ax + x;
-                ny = ay + y;
+			nx = ax + x;
+			ny = ay + y;
 
-                // If move is off grid, abort
+			// If move is off grid, abort
 
-                if ((nx < 0) || (nx > xmax) || (ny < 0) || (ny > ymax)) {
-                    return;
-                }
+			if ( ( nx < 0 ) || ( nx > xmax ) || ( ny < 0 ) || ( ny > ymax ) ) {
+				return;
+			}
 
-                // Check data at new position for bead type
+			// Check data at new position for bead type
 
-                data = PS.data(nx, ny);
-                if (data === IS_WALL) {
-                    return; // done
-                }
+			data = PS.data( nx, ny );
+			if ( data === IS_WALL ) {
+				return; // done
+			}
 
-                if (data === IS_GOAL) {
-                    if (level <= 20) {
-                        len = levelData.length; // check # levels
-                        if ((level + 1) < len) {
-                            level += 1; // loop on last level
-                        }
-                        start(level); // next level
-                        return;
-                    }
-                    else {
-                        len = levelData.length; // check # levels
-                        if ((level + 1) < len) {
-                            level += 1; // loop on last level
-                        }
-                        start(level); // next level
-                        return;
-                    }
-                }
+			if ( data === IS_GOAL ) {
+				len = levelData.length; // check # levels
+				if ( ( level + 1 ) < len ) {
+					level += 1; // loop on last level
+				}
+				start( level ); // next level
+				return;
+			}
 
-                if (data === IS_STOP) {
-                    len = levelData.length; // check # levels
-                    if ((level + 1) < len) {
-                        level += 1; // loop on last level
-                    }
-                    start(level); // next level
-                    return;
-                }
+			if ( data === IS_FOOD ) {
+				asize -= 4; // grow actor
 
-                if (data === IS_FOOD) {
-                    asize -= 4; // grow actor
+				// If food is on foods list, deactivate
 
-                    // If food is on foods list, deactivate
+				found = false;
+				if ( foods !== undefined ) {
+					len = foods.length;
+					for ( i = 0; i < len; i += 1 ) {
+						pos = foods[ i ];
+						xp = pos[ 0 ];
+						yp = pos[ 1 ];
+						if ( ( nx === xp ) && ( ny === yp ) ) {
+							pos[ 3 ] = false; // deactivate
+							found = true; // don't search fadefoods
+							break;
+						}
+					}
+				}
 
-                    found = false;
-                    if (foods !== undefined) {
-                        len = foods.length;
-                        for (i = 0; i < len; i += 1) {
-                            pos = foods[i];
-                            xp = pos[0];
-                            yp = pos[1];
-                            if ((nx === xp) && (ny === yp)) {
-                                pos[3] = false; // deactivate
-                                found = true; // don't search fadefoods
-                                break;
-                            }
-                        }
-                    }
+				// If food is on fadefoods list, deactivate
 
-                    // If food is on fadefoods list, deactivate
+				if ( !found && ( fadefoods !== undefined ) ) {
+					len = fadefoods.length;
+					for ( i = 0; i < len; i += 1 ) {
+						pos = fadefoods[ i ];
+						xp = pos[ 0 ];
+						yp = pos[ 1 ];
+						if ( ( nx === xp ) && ( ny === yp ) ) {
+							pos[ 3 ] = false; // deactivate
+							break;
+						}
+					}
+				}
+			}
+			else {
+				asize += 2; // shrink actor
+				if ( asize > 20 ) {
+					if ( level > 0 ) {
+						blackout();
+					}
+					else {
+						start( 1 );
+					}
+					return;
+				}
+			}
 
-                    if (!found && (fadefoods !== undefined)) {
-                        len = fadefoods.length;
-                        for (i = 0; i < len; i += 1) {
-                            pos = fadefoods[i];
-                            xp = pos[0];
-                            yp = pos[1];
-                            if ((nx === xp) && (ny === yp)) {
-                                pos[3] = false; // deactivate
-                                break;
-                            }
-                        }
-                    }
-                }
-                else {
-                    asize += 2; // shrink actor
-                    if (asize > 20) {
-                        if (level > 0) {
-                            blackout();
-                        }
-                        else {
-                            start(1);
-                        }
-                        return;
-                    }
-                }
+			// Change previous actor position to floor
 
-                // Change previous actor position to floor
+			makeFloor( ax, ay );
 
-                makeFloor(ax, ay);
+			// Move actor
 
-                // Move actor
+			place( nx, ny, asize );
 
-                place(nx, ny, asize);
+			// Handle fadewalls
 
-                // Handle fadewalls
+			if ( fadewalls !== undefined ) {
+				len = fadewalls.length;
+				for ( i = 0; i < len; i += 1 ) {
+					pos = fadewalls[ i ];
+					if ( pos[ 3 ] ) { // active?
+						xp = pos[ 0 ];
+						yp = pos[ 1 ];
+						delta = pos[ 2 ];
+						alpha = PS.alpha( xp, yp ) - delta;
+						if ( alpha <= 0 ) {
+							makeFloor( xp, yp );
+							pos[ 3 ] = false; // deactivate
+						}
+						else { // fade it
+							PS.alpha( xp, yp, alpha );
+						}
+					}
+				}
+			}
 
-                if (fadewalls !== undefined) {
-                    len = fadewalls.length;
-                    for (i = 0; i < len; i += 1) {
-                        pos = fadewalls[i];
-                        if (pos[3]) { // active?
-                            xp = pos[0];
-                            yp = pos[1];
-                            delta = pos[2];
-                            alpha = PS.alpha(xp, yp) - delta;
-                            if (alpha <= 0) {
-                                makeFloor(xp, yp);
-                                pos[3] = false; // deactivate
-                            }
-                            else { // fade it
-                                PS.alpha(xp, yp, alpha);
-                            }
-                        }
-                    }
-                }
+			// Handle fadefoods
 
-                // Handle fadefoods
+			if ( fadefoods !== undefined ) {
+				len = fadefoods.length;
+				for ( i = 0; i < len; i += 1 ) {
+					pos = fadefoods[ i ];
+					if ( pos[ 3 ] ) { // active?
+						xp = pos[ 0 ];
+						yp = pos[ 1 ];
+						delta = pos[ 2 ];
+						alpha = PS.alpha( xp, yp ) - delta;
+						if ( alpha <= 0 ) {
+							makeFloor( xp, yp );
+							pos[ 3 ] = false; // deactivate
+						}
+						else { // fade it
+							PS.alpha( xp, yp, alpha );
+						}
+					}
+				}
+			}
 
-                if (fadefoods !== undefined) {
-                    len = fadefoods.length;
-                    for (i = 0; i < len; i += 1) {
-                        pos = fadefoods[i];
-                        if (pos[3]) { // active?
-                            xp = pos[0];
-                            yp = pos[1];
-                            delta = pos[2];
-                            alpha = PS.alpha(xp, yp) - delta;
-                            if (alpha <= 0) {
-                                makeFloor(xp, yp);
-                                pos[3] = false; // deactivate
-                            }
-                            else { // fade it
-                                PS.alpha(xp, yp, alpha);
-                            }
-                        }
-                    }
-                }
+			// Handle goal alpha
 
-                // Handle goal alpha
-
-                if (gdelta > 0) {
-                    alpha = PS.borderAlpha(gx, gy) - gdelta;
-
-                    if (alpha <= 0) {
-                        if (level !== 20) {
-                            gdelta = 0; // deactivate
-                            makeFloor(gx, gy);
-                        }
-                        else {
-                            gdelta = 0;
-                            makeStop(gx, gy);
-                        }
-                    }
-                    else {
-                        PS.borderAlpha(gx, gy, alpha);
-                    }
-
-                }
-
-
-
-            }
-        }
-
+			if ( gdelta > 0 ) {
+				alpha = PS.borderAlpha( gx, gy ) - gdelta;
+				if ( alpha <= 0 ) {
+					gdelta = 0; // deactivate
+					makeFloor( gx, gy );
+				}
+				else {
+					PS.borderAlpha( gx, gy, alpha );
+				}
+			}
+		}
 	};
-}() );
+}() )
 
 PS.init = function( system, options )
 {
@@ -846,7 +748,6 @@ PS.init = function( system, options )
 PS.keyDown = function( key, shift, ctrl, options )
 {
 	"use strict";
-
 
 	switch ( key )
 	{
